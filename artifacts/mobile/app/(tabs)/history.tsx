@@ -15,7 +15,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useColors } from "@/hooks/useColors";
 
 const TYPE_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
-  accident: { icon: "car-crash", color: "#ff6b35", label: "Accident" },
+  accident: { icon: "car-emergency", color: "#ff6b35", label: "Accident" },
   fire: { icon: "fire", color: "#ff4500", label: "Fire" },
   heart_attack: { icon: "heart-pulse", color: "#e8003a", label: "Heart Attack" },
   theft: { icon: "shield-alert", color: "#9c27b0", label: "Theft / Harassment" },

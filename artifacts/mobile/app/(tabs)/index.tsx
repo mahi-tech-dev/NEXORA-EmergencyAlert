@@ -14,7 +14,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useCreateEmergency } from "@workspace/api-client-react";
+import { useCreateEmergency, getListEmergenciesQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -89,6 +90,7 @@ export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const queryClient = useQueryClient();
   const [selectedType, setSelectedType] = useState<EmergencyType | null>(null);
   const [sosActive, setSosActive] = useState(false);
   const [countdown, setCountdown] = useState(3);
@@ -97,7 +99,13 @@ export default function DashboardScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacity = useRef(new Animated.Value(0.6)).current;
 
-  const { mutate: createEmergency } = useCreateEmergency();
+  const { mutate: createEmergency } = useCreateEmergency({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListEmergenciesQueryKey() });
+      },
+    },
+  });
 
   useEffect(() => {
     const pulse = Animated.loop(
