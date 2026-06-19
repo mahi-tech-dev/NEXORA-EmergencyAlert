@@ -92,6 +92,29 @@ export const ListEmergenciesResponse = zod.object({
 
 
 /**
+ * @summary Update emergency alert status
+ */
+export const UpdateEmergencyStatusParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateEmergencyStatusBody = zod.object({
+  "status": zod.enum(['active', 'resolved'])
+})
+
+export const UpdateEmergencyStatusResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "type": zod.enum(['accident', 'fire', 'heart_attack', 'theft']),
+  "latitude": zod.number().nullish(),
+  "longitude": zod.number().nullish(),
+  "address": zod.string().nullish(),
+  "status": zod.enum(['active', 'resolved']),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary List nearby help locations
  */
 export const ListNearbyQueryParams = zod.object({
@@ -110,6 +133,115 @@ export const ListNearbyResponse = zod.object({
   "latitude": zod.number(),
   "longitude": zod.number()
 }))
+})
+
+
+/**
+ * @summary Get user medical profile
+ */
+export const GetProfileResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "profileImage": zod.string().nullish(),
+  "dob": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "bloodGroup": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "allergies": zod.string().nullish(),
+  "medicalConditions": zod.string().nullish(),
+  "medications": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Create or update medical profile
+ */
+export const UpsertProfileBody = zod.object({
+  "profileImage": zod.string().nullish(),
+  "dob": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "bloodGroup": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "allergies": zod.string().nullish(),
+  "medicalConditions": zod.string().nullish(),
+  "medications": zod.string().nullish()
+})
+
+export const UpsertProfileResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "profileImage": zod.string().nullish(),
+  "dob": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "bloodGroup": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "allergies": zod.string().nullish(),
+  "medicalConditions": zod.string().nullish(),
+  "medications": zod.string().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary List emergency contacts
+ */
+export const ListContactsResponse = zod.object({
+  "contacts": zod.array(zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "name": zod.string(),
+  "relationship": zod.string(),
+  "phone": zod.string(),
+  "priority": zod.string(),
+  "createdAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Create emergency contact
+ */
+export const CreateContactBody = zod.object({
+  "name": zod.string(),
+  "relationship": zod.string(),
+  "phone": zod.string(),
+  "priority": zod.string()
+})
+
+
+/**
+ * @summary Update emergency contact
+ */
+export const UpdateContactParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateContactBody = zod.object({
+  "name": zod.string().optional(),
+  "relationship": zod.string().optional(),
+  "phone": zod.string().optional(),
+  "priority": zod.string().optional()
+})
+
+export const UpdateContactResponse = zod.object({
+  "id": zod.number(),
+  "userId": zod.number(),
+  "name": zod.string(),
+  "relationship": zod.string(),
+  "phone": zod.string(),
+  "priority": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete emergency contact
+ */
+export const DeleteContactParams = zod.object({
+  "id": zod.coerce.number()
 })
 
 

@@ -71,6 +71,18 @@ export interface CreateEmergencyBody {
   address?: string | null;
 }
 
+export type UpdateAlertStatusBodyStatus = typeof UpdateAlertStatusBodyStatus[keyof typeof UpdateAlertStatusBodyStatus];
+
+
+export const UpdateAlertStatusBodyStatus = {
+  active: 'active',
+  resolved: 'resolved',
+} as const;
+
+export interface UpdateAlertStatusBody {
+  status: UpdateAlertStatusBodyStatus;
+}
+
 export type NearbyLocationType = typeof NearbyLocationType[keyof typeof NearbyLocationType];
 
 
@@ -97,6 +109,60 @@ export interface ListEmergenciesResponse {
 
 export interface ListNearbyResponse {
   locations: NearbyLocation[];
+}
+
+export interface MedicalProfile {
+  id: number;
+  userId: number;
+  profileImage?: string | null;
+  dob?: string | null;
+  gender?: string | null;
+  bloodGroup?: string | null;
+  address?: string | null;
+  allergies?: string | null;
+  medicalConditions?: string | null;
+  medications?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertProfileBody {
+  profileImage?: string | null;
+  dob?: string | null;
+  gender?: string | null;
+  bloodGroup?: string | null;
+  address?: string | null;
+  allergies?: string | null;
+  medicalConditions?: string | null;
+  medications?: string | null;
+}
+
+export interface EmergencyContact {
+  id: number;
+  userId: number;
+  name: string;
+  relationship: string;
+  phone: string;
+  priority: string;
+  createdAt: string;
+}
+
+export interface CreateContactBody {
+  name: string;
+  relationship: string;
+  phone: string;
+  priority: string;
+}
+
+export interface UpdateContactBody {
+  name?: string;
+  relationship?: string;
+  phone?: string;
+  priority?: string;
+}
+
+export interface ListContactsResponse {
+  contacts: EmergencyContact[];
 }
 
 export interface ErrorResponse {

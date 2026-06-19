@@ -1,0 +1,296 @@
+IMPORTANT:
+
+This is an existing Expo React Native + PostgreSQL application called "EmergencyAlert by NEXORA".
+
+DO NOT break existing features.
+
+Preserve:
+
+- Authentication (JWT)
+- SOS Dashboard
+- Nearby Help page
+- Alert History
+- Dark Red Glassmorphism UI
+- Existing PostgreSQL structure
+- Existing navigation and functionality
+
+Use the same design language throughout.
+
+==================================================
+NEXORA EmergencyAlert v1.1
+==================================================
+
+Add the following modules professionally.
+
+--------------------------------------------------
+1. PROFILE TAB
+--------------------------------------------------
+
+Add a new bottom navigation tab:
+
+SOS | Nearby | History | Profile
+
+Create a Profile screen with dark red glassmorphism styling.
+
+Sections:
+
+A) Profile Photo
+Support:
+- Camera capture
+- Gallery upload
+
+B) Personal Information
+
+Fields:
+
+- Full Name
+- Date of Birth (age calculated automatically)
+- Gender
+
+Dropdown:
+
+Male
+Female
+Other
+Prefer not to say
+
+Blood Group dropdown:
+
+A+
+A-
+B+
+B-
+AB+
+AB-
+O+
+O-
+Unknown
+
+Address
+
+C) Medical Information
+
+Fields:
+
+- Allergies
+- Medical Conditions
+- Current Medications
+
+--------------------------------------------------
+2. DATABASE TABLE
+--------------------------------------------------
+
+Create table:
+
+medical_profiles
+
+Columns:
+
+id
+user_id
+profile_image
+dob
+gender
+blood_group
+address
+allergies
+medical_conditions
+medications
+created_at
+updated_at
+
+Connect with users table.
+
+--------------------------------------------------
+3. EMERGENCY CONTACTS
+--------------------------------------------------
+
+Maximum 5 contacts.
+
+Create table:
+
+emergency_contacts
+
+Columns:
+
+id
+user_id
+name
+relationship
+phone
+priority
+created_at
+
+Relationship options:
+
+Mother
+Father
+Brother
+Sister
+Spouse
+Friend
+Doctor
+Other
+
+Priority options:
+
+Primary
+Secondary
+Doctor
+Other
+
+Allow:
+
+Add
+Edit
+Delete
+
+Display contacts inside Profile screen.
+
+--------------------------------------------------
+4. IMPROVED SOS FLOW
+--------------------------------------------------
+
+Current 0-second flow should become:
+
+Press and Hold SOS
+
+5-second countdown:
+
+5
+4
+3
+2
+1
+
+Cancel button available.
+
+After countdown:
+
+Send alert normally.
+
+Keep existing alert logic.
+
+--------------------------------------------------
+5. ALERT STATUS
+--------------------------------------------------
+
+History records should include status:
+
+ACTIVE
+RESOLVED
+
+New alerts default to ACTIVE.
+
+Display status badge on History cards.
+
+--------------------------------------------------
+6. SAFE CHECK-IN
+--------------------------------------------------
+
+15 minutes after an alert:
+
+Show notification:
+
+"Are you safe?"
+
+Buttons:
+
+YES I'M SAFE
+NEED HELP
+
+YES:
+Change alert status to RESOLVED.
+
+NEED HELP:
+Keep status ACTIVE.
+
+--------------------------------------------------
+7. EMERGENCY MEDICAL ID SCREEN
+--------------------------------------------------
+
+Inside Profile create:
+
+Emergency Medical ID
+
+Display full-screen emergency card.
+
+Large readable design.
+
+Show:
+
+Profile Photo
+Full Name
+Auto-calculated Age
+Blood Group
+Allergies
+Medical Conditions
+Current Medications
+
+Emergency Contacts:
+
+Primary
+Secondary
+Doctor
+
+Emergency Number:
+
+112
+
+Bottom text:
+
+EmergencyAlert by NEXORA
+Built for Every Second That Matters
+
+Use red emergency styling.
+
+--------------------------------------------------
+8. TEST MODE BANNER
+--------------------------------------------------
+
+Top of SOS screen show:
+
+⚠ TEST MODE
+No real emergency services are contacted.
+
+Use warning style.
+
+--------------------------------------------------
+9. DESIGN REQUIREMENTS
+--------------------------------------------------
+
+Maintain existing dark red glassmorphism theme.
+
+Rounded cards.
+
+Soft shadows.
+
+Do not redesign existing pages unnecessarily.
+
+Preserve Nearby page and History page.
+
+Avoid breaking current database data.
+
+--------------------------------------------------
+10. CODE QUALITY
+--------------------------------------------------
+
+Use reusable components.
+
+Handle empty states gracefully.
+
+Prevent crashes.
+
+Keep code clean and maintainable.
+
+Test all flows after implementation.
+
+Return a summary of:
+
+- Files created
+- Files modified
+- Database tables added
+- Features completed
+- Any package dependencies installed
+
+Do not remove existing functionality.

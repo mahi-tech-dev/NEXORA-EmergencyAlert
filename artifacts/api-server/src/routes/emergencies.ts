@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db, emergencyAlertsTable } from "@workspace/db";
 import {
   CreateEmergencyBody,
@@ -31,6 +31,43 @@ router.post("/emergencies", requireAuth, async (req: AuthRequest, res): Promise<
     .returning();
 
   res.status(201).json({
+    id: alert.id,
+    userId: alert.userId,
+    type: alert.type,
+    latitude: alert.latitude,
+    longitude: alert.longitude,
+    address: alert.address,
+    status: alert.status,
+    createdAt: alert.createdAt,
+  });
+});
+
+router.patch("/emergencies/:id/status", requireAuth, async (req: AuthRequest, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const { UpdateEmergencyStatusBody } = await import("@workspace/api-zod");
+  const parsed = UpdateEmergencyStatusBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const [alert] = await db
+    .update(emergencyAlertsTable)
+    .set({ status: parsed.data.status })
+    .where(and(eq(emergencyAlertsTable.id, id), eq(emergencyAlertsTable.userId, req.userId!)))
+    .returning();
+
+  if (!alert) {
+    res.status(404).json({ error: "Alert not found" });
+    return;
+  }
+
+  res.json({
     id: alert.id,
     userId: alert.userId,
     type: alert.type,
