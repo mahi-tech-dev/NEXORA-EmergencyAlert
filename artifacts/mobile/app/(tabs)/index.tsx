@@ -101,9 +101,12 @@ export default function DashboardScreen() {
   const [sosActive, setSosActive] = useState(false);
   const [countdown, setCountdown] = useState(COUNTDOWN_START);
   const [alertSent, setAlertSent] = useState(false);
+  const [sosCooldownMsg, setSosCooldownMsg] = useState(false);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const safeCheckInRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAlertIdRef = useRef<number | null>(null);
+  const lastAlertSentAtRef = useRef<number | null>(null);
+  const cooldownMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pulseOpacity = useRef(new Animated.Value(0.6)).current;
 
@@ -177,12 +180,22 @@ export default function DashboardScreen() {
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
       if (safeCheckInRef.current) clearTimeout(safeCheckInRef.current);
+      if (cooldownMsgTimerRef.current) clearTimeout(cooldownMsgTimerRef.current);
     };
   }, []);
 
   const handleSOS = async () => {
     if (!selectedType) {
       Alert.alert("Select Emergency Type", "Please select the type of emergency before triggering SOS.");
+      return;
+    }
+    // Duplicate prevention: block for 30s after last alert
+    const COOLDOWN_MS = 30 * 1000;
+    if (lastAlertSentAtRef.current !== null && Date.now() - lastAlertSentAtRef.current < COOLDOWN_MS) {
+      setSosCooldownMsg(true);
+      if (cooldownMsgTimerRef.current) clearTimeout(cooldownMsgTimerRef.current);
+      cooldownMsgTimerRef.current = setTimeout(() => setSosCooldownMsg(false), 4000);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -231,6 +244,7 @@ export default function DashboardScreen() {
           },
         });
 
+        lastAlertSentAtRef.current = Date.now();
         setAlertSent(true);
       }
     }, 1000);
@@ -348,6 +362,16 @@ export default function DashboardScreen() {
         <MaterialCommunityIcons name="alert-rhombus" size={16} color="#ff9100" />
         <Text style={styles.testBannerText}>⚠ TEST MODE — No real emergency services are contacted.</Text>
       </View>
+
+      {/* SOS Cooldown Message */}
+      {sosCooldownMsg && (
+        <View style={{ marginHorizontal: 20, marginBottom: 8, backgroundColor: "rgba(232,0,58,0.10)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(232,0,58,0.35)", paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <MaterialCommunityIcons name="alert-circle" size={18} color={colors.primary} />
+          <Text style={{ flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.primary }}>
+            Emergency alert already active. Please wait 30 seconds.
+          </Text>
+        </View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.sosSection}>

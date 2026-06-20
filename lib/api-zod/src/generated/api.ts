@@ -52,6 +52,23 @@ export const LoginResponse = zod.object({
 
 
 /**
+ * @summary Reset password by email
+ */
+export const resetPasswordBodyNewPasswordMin = 6;
+
+
+
+export const ResetPasswordBody = zod.object({
+  "email": zod.string().email(),
+  "newPassword": zod.string().min(resetPasswordBodyNewPasswordMin)
+})
+
+export const ResetPasswordResponse = zod.object({
+  "message": zod.string()
+})
+
+
+/**
  * @summary Get current user
  */
 export const GetMeResponse = zod.object({

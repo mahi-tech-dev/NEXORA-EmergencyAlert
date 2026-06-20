@@ -35,6 +35,16 @@ export interface LoginBody {
   password: string;
 }
 
+export interface ResetPasswordBody {
+  email: string;
+  /** @minLength 6 */
+  newPassword: string;
+}
+
+export interface MessageResponse {
+  message: string;
+}
+
 export type EmergencyType = typeof EmergencyType[keyof typeof EmergencyType];
 
 

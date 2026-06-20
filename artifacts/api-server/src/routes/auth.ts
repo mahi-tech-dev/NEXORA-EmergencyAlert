@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
-import { RegisterBody, LoginBody, GetMeResponse, LoginResponse } from "@workspace/api-zod";
+import { RegisterBody, LoginBody, GetMeResponse, LoginResponse, ResetPasswordBody } from "@workspace/api-zod";
 import { requireAuth, signToken, type AuthRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -79,6 +79,23 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       token,
     })
   );
+});
+
+router.post("/auth/reset-password", async (req, res): Promise<void> => {
+  const parsed = ResetPasswordBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Email and new password (min 6 chars) are required" });
+    return;
+  }
+  const { email, newPassword } = parsed.data;
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  if (!user) {
+    res.status(404).json({ error: "No account found with this email address" });
+    return;
+  }
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, user.id));
+  res.json({ message: "Password reset successfully. You can now sign in." });
 });
 
 router.get("/auth/me", requireAuth, async (req: AuthRequest, res): Promise<void> => {

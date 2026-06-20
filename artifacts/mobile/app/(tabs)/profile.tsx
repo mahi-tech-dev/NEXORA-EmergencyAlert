@@ -1,20 +1,21 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   Modal,
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -40,6 +41,17 @@ interface ContactForm {
   relationship: string;
   phone: string;
   priority: string;
+}
+
+interface Snapshot {
+  profileImage: string;
+  dob: string;
+  gender: string;
+  bloodGroup: string;
+  address: string;
+  allergies: string;
+  medicalConditions: string;
+  medications: string;
 }
 
 function SectionCard({ title, children, colors }: { title: string; children: React.ReactNode; colors: any }) {
@@ -80,6 +92,25 @@ function InputField({ value, onChangeText, placeholder, multiline, colors }: { v
   );
 }
 
+function ReadOnlyField({ value, placeholder, multiline, colors }: { value: string; placeholder?: string; multiline?: boolean; colors: any }) {
+  return (
+    <View style={{
+      backgroundColor: colors.secondary,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 12,
+      ...(multiline ? { minHeight: 72 } : {}),
+    }}>
+      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: value ? colors.foreground : colors.mutedForeground }}>
+        {value || placeholder || "—"}
+      </Text>
+    </View>
+  );
+}
+
 function PickerRow({ label, value, onPress, colors }: { label: string; value: string; onPress: () => void; colors: any }) {
   return (
     <Pressable onPress={onPress} style={{ backgroundColor: colors.secondary, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderWidth: 1, borderColor: colors.border, marginBottom: 12 }}>
@@ -111,16 +142,23 @@ export default function ProfileScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const navigation = useNavigation();
   const { user } = useAuth();
 
   const { data: profileData, isLoading: profileLoading } = useGetProfile();
   const { data: contactsData, isLoading: contactsLoading } = useListContacts();
   const contacts = contactsData?.contacts ?? [];
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [snapshot, setSnapshot] = useState<Snapshot>({ profileImage: "", dob: "", gender: "", bloodGroup: "", address: "", allergies: "", medicalConditions: "", medications: "" });
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const saveSuccessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const { mutate: upsertProfile, isPending: saving } = useUpsertProfile({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey() });
+        setIsEditing(false);
         setSaveSuccess(true);
         if (saveSuccessTimer.current) clearTimeout(saveSuccessTimer.current);
         saveSuccessTimer.current = setTimeout(() => setSaveSuccess(false), 3000);
@@ -146,8 +184,6 @@ export default function ProfileScreen() {
   const [allergies, setAllergies] = useState("");
   const [medicalConditions, setMedicalConditions] = useState("");
   const [medications, setMedications] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const saveSuccessTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [genderPickerVisible, setGenderPickerVisible] = useState(false);
   const [bloodGroupPickerVisible, setBloodGroupPickerVisible] = useState(false);
@@ -172,6 +208,85 @@ export default function ProfileScreen() {
     }
   }, [profileData]);
 
+  const isDirty = useMemo(() => {
+    if (!isEditing) return false;
+    return (
+      profileImage !== snapshot.profileImage ||
+      dob !== snapshot.dob ||
+      gender !== snapshot.gender ||
+      bloodGroup !== snapshot.bloodGroup ||
+      address !== snapshot.address ||
+      allergies !== snapshot.allergies ||
+      medicalConditions !== snapshot.medicalConditions ||
+      medications !== snapshot.medications
+    );
+  }, [isEditing, profileImage, dob, gender, bloodGroup, address, allergies, medicalConditions, medications, snapshot]);
+
+  function showUnsavedDialog(onDiscard?: () => void) {
+    Alert.alert(
+      "Unsaved Changes",
+      "Unsaved changes detected. Discard changes?",
+      [
+        { text: "Continue Editing", style: "cancel" },
+        {
+          text: "Discard Changes",
+          style: "destructive",
+          onPress: () => {
+            restoreSnapshot();
+            onDiscard?.();
+          },
+        },
+      ]
+    );
+  }
+
+  function restoreSnapshot() {
+    setProfileImage(snapshot.profileImage);
+    setDob(snapshot.dob);
+    setGender(snapshot.gender);
+    setBloodGroup(snapshot.bloodGroup);
+    setAddress(snapshot.address);
+    setAllergies(snapshot.allergies);
+    setMedicalConditions(snapshot.medicalConditions);
+    setMedications(snapshot.medications);
+    setIsEditing(false);
+  }
+
+  function handleStartEditing() {
+    setSnapshot({ profileImage, dob, gender, bloodGroup, address, allergies, medicalConditions, medications });
+    setIsEditing(true);
+    setSaveSuccess(false);
+  }
+
+  function handleCancelEditing() {
+    if (isDirty) {
+      showUnsavedDialog();
+    } else {
+      setIsEditing(false);
+    }
+  }
+
+  // Android back button guard
+  useEffect(() => {
+    if (!isEditing || !isDirty) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      showUnsavedDialog();
+      return true;
+    });
+    return () => sub.remove();
+  }, [isEditing, isDirty]);
+
+  // Tab press guard (intercepts tab navigation when dirty)
+  useEffect(() => {
+    if (!isEditing || !isDirty) return;
+    const parent = navigation.getParent?.();
+    const unsub = (parent as any)?.addListener?.("tabPress", (e: any) => {
+      e.preventDefault();
+      showUnsavedDialog();
+    });
+    return () => unsub?.();
+  }, [navigation, isEditing, isDirty]);
+
   async function pickImage(source: "camera" | "gallery") {
     let result: ImagePicker.ImagePickerResult;
     const opts: ImagePicker.ImagePickerOptions = { mediaTypes: "images", allowsEditing: true, aspect: [1, 1], quality: 0.5, base64: true };
@@ -192,10 +307,7 @@ export default function ProfileScreen() {
   }
 
   function showImagePicker() {
-    if (Platform.OS === "web") {
-      pickImage("gallery");
-      return;
-    }
+    if (Platform.OS === "web") { pickImage("gallery"); return; }
     Alert.alert("Profile Photo", "Choose a source", [
       { text: "Camera", onPress: () => pickImage("camera") },
       { text: "Gallery", onPress: () => pickImage("gallery") },
@@ -261,19 +373,41 @@ export default function ProfileScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Header */}
       <View style={{ paddingTop: Platform.OS === "web" ? insets.top + 67 : insets.top + 16, paddingHorizontal: 20, paddingBottom: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <View>
           <Text style={{ fontSize: 26, fontFamily: "Inter_700Bold", color: colors.foreground }}>Profile</Text>
           <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 2 }}>Medical & Emergency Info</Text>
         </View>
-        <Pressable
-          onPress={() => router.push("/medical-id")}
-          style={{ backgroundColor: colors.glassTint, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "rgba(232,0,58,0.3)" }}
-        >
-          <MaterialCommunityIcons name="card-account-details" size={16} color={colors.primary} />
-          <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.primary }}>Med ID</Text>
-        </Pressable>
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          {/* Med ID button — always visible */}
+          <Pressable
+            onPress={() => router.push("/medical-id")}
+            style={{ backgroundColor: colors.glassTint, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "rgba(232,0,58,0.3)" }}
+          >
+            <MaterialCommunityIcons name="card-account-details" size={16} color={colors.primary} />
+            <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.primary }}>Med ID</Text>
+          </Pressable>
+          {/* Edit Profile button — only when not editing */}
+          {!isEditing && (
+            <Pressable
+              onPress={handleStartEditing}
+              style={{ backgroundColor: colors.secondary, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: colors.border }}
+            >
+              <Feather name="edit-2" size={14} color={colors.foreground} />
+              <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>Edit</Text>
+            </Pressable>
+          )}
+        </View>
       </View>
+
+      {/* Editing indicator bar */}
+      {isEditing && (
+        <View style={{ marginHorizontal: 20, marginBottom: 8, backgroundColor: "rgba(232,0,58,0.08)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(232,0,58,0.25)", paddingHorizontal: 12, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Feather name="edit-3" size={13} color={colors.primary} />
+          <Text style={{ flex: 1, fontSize: 12, fontFamily: "Inter_500Medium", color: colors.primary }}>Editing profile — tap Save Changes to apply.</Text>
+        </View>
+      )}
 
       {isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
@@ -285,19 +419,31 @@ export default function ProfileScreen() {
           {/* Profile Photo */}
           <SectionCard title="Profile Photo" colors={colors}>
             <View style={{ alignItems: "center" }}>
-              <Pressable onPress={showImagePicker} style={{ position: "relative" }}>
-                {profileImage ? (
+              {isEditing ? (
+                <Pressable onPress={showImagePicker} style={{ position: "relative" }}>
+                  {profileImage ? (
+                    <Image source={{ uri: profileImage }} style={{ width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: colors.primary }} />
+                  ) : (
+                    <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: colors.secondary, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: colors.border }}>
+                      <Feather name="user" size={40} color={colors.mutedForeground} />
+                    </View>
+                  )}
+                  <View style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.background }}>
+                    <Feather name="camera" size={14} color="#fff" />
+                  </View>
+                </Pressable>
+              ) : (
+                profileImage ? (
                   <Image source={{ uri: profileImage }} style={{ width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: colors.primary }} />
                 ) : (
                   <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: colors.secondary, alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: colors.border }}>
                     <Feather name="user" size={40} color={colors.mutedForeground} />
                   </View>
-                )}
-                <View style={{ position: "absolute", bottom: 0, right: 0, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: colors.background }}>
-                  <Feather name="camera" size={14} color="#fff" />
-                </View>
-              </Pressable>
-              <Text style={{ marginTop: 10, fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>Tap to change photo</Text>
+                )
+              )}
+              {isEditing && (
+                <Text style={{ marginTop: 10, fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>Tap to change photo</Text>
+              )}
             </View>
           </SectionCard>
 
@@ -309,28 +455,56 @@ export default function ProfileScreen() {
             </View>
 
             <FieldLabel label="DATE OF BIRTH (YYYY-MM-DD)" colors={colors} />
-            <InputField value={dob} onChangeText={setDob} placeholder="e.g. 1990-05-15" colors={colors} />
+            {isEditing ? (
+              <InputField value={dob} onChangeText={setDob} placeholder="e.g. 1990-05-15" colors={colors} />
+            ) : (
+              <ReadOnlyField value={dob} placeholder="Not set" colors={colors} />
+            )}
 
             <FieldLabel label="GENDER" colors={colors} />
-            <PickerRow label="Select gender" value={gender} onPress={() => setGenderPickerVisible(true)} colors={colors} />
+            {isEditing ? (
+              <PickerRow label="Select gender" value={gender} onPress={() => setGenderPickerVisible(true)} colors={colors} />
+            ) : (
+              <ReadOnlyField value={gender} placeholder="Not set" colors={colors} />
+            )}
 
             <FieldLabel label="BLOOD GROUP" colors={colors} />
-            <PickerRow label="Select blood group" value={bloodGroup} onPress={() => setBloodGroupPickerVisible(true)} colors={colors} />
+            {isEditing ? (
+              <PickerRow label="Select blood group" value={bloodGroup} onPress={() => setBloodGroupPickerVisible(true)} colors={colors} />
+            ) : (
+              <ReadOnlyField value={bloodGroup} placeholder="Not set" colors={colors} />
+            )}
 
             <FieldLabel label="ADDRESS" colors={colors} />
-            <InputField value={address} onChangeText={setAddress} placeholder="Your home address" multiline colors={colors} />
+            {isEditing ? (
+              <InputField value={address} onChangeText={setAddress} placeholder="Your home address" multiline colors={colors} />
+            ) : (
+              <ReadOnlyField value={address} placeholder="Not set" multiline colors={colors} />
+            )}
           </SectionCard>
 
           {/* Medical Info */}
           <SectionCard title="Medical Information" colors={colors}>
             <FieldLabel label="ALLERGIES" colors={colors} />
-            <InputField value={allergies} onChangeText={setAllergies} placeholder="e.g. Penicillin, Peanuts" multiline colors={colors} />
+            {isEditing ? (
+              <InputField value={allergies} onChangeText={setAllergies} placeholder="e.g. Penicillin, Peanuts" multiline colors={colors} />
+            ) : (
+              <ReadOnlyField value={allergies} placeholder="None listed" multiline colors={colors} />
+            )}
 
             <FieldLabel label="MEDICAL CONDITIONS" colors={colors} />
-            <InputField value={medicalConditions} onChangeText={setMedicalConditions} placeholder="e.g. Diabetes, Hypertension" multiline colors={colors} />
+            {isEditing ? (
+              <InputField value={medicalConditions} onChangeText={setMedicalConditions} placeholder="e.g. Diabetes, Hypertension" multiline colors={colors} />
+            ) : (
+              <ReadOnlyField value={medicalConditions} placeholder="None listed" multiline colors={colors} />
+            )}
 
             <FieldLabel label="CURRENT MEDICATIONS" colors={colors} />
-            <InputField value={medications} onChangeText={setMedications} placeholder="e.g. Metformin 500mg" multiline colors={colors} />
+            {isEditing ? (
+              <InputField value={medications} onChangeText={setMedications} placeholder="e.g. Metformin 500mg" multiline colors={colors} />
+            ) : (
+              <ReadOnlyField value={medications} placeholder="None listed" multiline colors={colors} />
+            )}
           </SectionCard>
 
           {/* Emergency Contacts */}
@@ -372,18 +546,30 @@ export default function ProfileScreen() {
             )}
           </SectionCard>
 
-          {/* Save Button */}
-          <Pressable
-            onPress={handleSave}
-            disabled={saving}
-            style={{ backgroundColor: colors.primary, borderRadius: colors.radius, paddingVertical: 16, alignItems: "center", marginBottom: 10 }}
-          >
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: 0.5 }}>Save Profile</Text>
-            )}
-          </Pressable>
+          {/* Save / Cancel — only in edit mode */}
+          {isEditing && (
+            <>
+              <Pressable
+                onPress={handleSave}
+                disabled={saving}
+                style={{ backgroundColor: colors.primary, borderRadius: colors.radius, paddingVertical: 16, alignItems: "center", marginBottom: 10 }}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: 0.5 }}>Save Changes</Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={handleCancelEditing}
+                disabled={saving}
+                style={{ backgroundColor: colors.secondary, borderRadius: colors.radius, paddingVertical: 14, alignItems: "center", marginBottom: 8, borderWidth: 1, borderColor: colors.border }}
+              >
+                <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>Cancel</Text>
+              </Pressable>
+            </>
+          )}
 
           {/* Inline save confirmation */}
           {saveSuccess && (
