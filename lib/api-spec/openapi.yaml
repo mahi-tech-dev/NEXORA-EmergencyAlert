@@ -153,6 +153,10 @@ components:
           enum:
             - active
             - resolved
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time

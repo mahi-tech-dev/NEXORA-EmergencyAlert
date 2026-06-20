@@ -71,6 +71,7 @@ export interface EmergencyAlert {
   longitude?: number | null;
   address?: string | null;
   status: EmergencyAlertStatus;
+  resolvedAt?: string | null;
   createdAt: string;
 }
 

@@ -9,6 +9,20 @@ import { requireAuth, type AuthRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
+function alertToJson(a: typeof emergencyAlertsTable.$inferSelect) {
+  return {
+    id: a.id,
+    userId: a.userId,
+    type: a.type,
+    latitude: a.latitude,
+    longitude: a.longitude,
+    address: a.address,
+    status: a.status,
+    resolvedAt: a.resolvedAt ?? null,
+    createdAt: a.createdAt,
+  };
+}
+
 router.post("/emergencies", requireAuth, async (req: AuthRequest, res): Promise<void> => {
   const parsed = CreateEmergencyBody.safeParse(req.body);
   if (!parsed.success) {
@@ -30,20 +44,11 @@ router.post("/emergencies", requireAuth, async (req: AuthRequest, res): Promise<
     })
     .returning();
 
-  res.status(201).json({
-    id: alert.id,
-    userId: alert.userId,
-    type: alert.type,
-    latitude: alert.latitude,
-    longitude: alert.longitude,
-    address: alert.address,
-    status: alert.status,
-    createdAt: alert.createdAt,
-  });
+  res.status(201).json(alertToJson(alert));
 });
 
 router.patch("/emergencies/:id/status", requireAuth, async (req: AuthRequest, res): Promise<void> => {
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -56,9 +61,11 @@ router.patch("/emergencies/:id/status", requireAuth, async (req: AuthRequest, re
     return;
   }
 
+  const resolvedAt = parsed.data.status === "resolved" ? new Date() : null;
+
   const [alert] = await db
     .update(emergencyAlertsTable)
-    .set({ status: parsed.data.status })
+    .set({ status: parsed.data.status, resolvedAt })
     .where(and(eq(emergencyAlertsTable.id, id), eq(emergencyAlertsTable.userId, req.userId!)))
     .returning();
 
@@ -67,16 +74,7 @@ router.patch("/emergencies/:id/status", requireAuth, async (req: AuthRequest, re
     return;
   }
 
-  res.json({
-    id: alert.id,
-    userId: alert.userId,
-    type: alert.type,
-    latitude: alert.latitude,
-    longitude: alert.longitude,
-    address: alert.address,
-    status: alert.status,
-    createdAt: alert.createdAt,
-  });
+  res.json(alertToJson(alert));
 });
 
 router.get("/emergencies", requireAuth, async (req: AuthRequest, res): Promise<void> => {
@@ -88,16 +86,7 @@ router.get("/emergencies", requireAuth, async (req: AuthRequest, res): Promise<v
 
   res.json(
     ListEmergenciesResponse.parse({
-      emergencies: alerts.map((a) => ({
-        id: a.id,
-        userId: a.userId,
-        type: a.type,
-        latitude: a.latitude,
-        longitude: a.longitude,
-        address: a.address,
-        status: a.status,
-        createdAt: a.createdAt,
-      })),
+      emergencies: alerts.map(alertToJson),
     })
   );
 });

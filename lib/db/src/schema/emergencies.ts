@@ -13,6 +13,7 @@ export const emergencyAlertsTable = pgTable("emergency_alerts", {
   longitude: real("longitude"),
   address: text("address"),
   status: text("status").notNull().default("active"), // active | resolved
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

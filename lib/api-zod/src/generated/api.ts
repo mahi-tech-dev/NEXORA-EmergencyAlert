@@ -103,6 +103,7 @@ export const ListEmergenciesResponse = zod.object({
   "longitude": zod.number().nullish(),
   "address": zod.string().nullish(),
   "status": zod.enum(['active', 'resolved']),
+  "resolvedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 }))
 })
@@ -127,6 +128,7 @@ export const UpdateEmergencyStatusResponse = zod.object({
   "longitude": zod.number().nullish(),
   "address": zod.string().nullish(),
   "status": zod.enum(['active', 'resolved']),
+  "resolvedAt": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 

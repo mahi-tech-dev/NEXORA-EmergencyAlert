@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Modal,
@@ -102,6 +103,7 @@ export default function DashboardScreen() {
   const [countdown, setCountdown] = useState(COUNTDOWN_START);
   const [alertSent, setAlertSent] = useState(false);
   const [sosCooldownMsg, setSosCooldownMsg] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const safeCheckInRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAlertIdRef = useRef<number | null>(null);
@@ -210,37 +212,54 @@ export default function DashboardScreen() {
       if (count === 0) {
         clearInterval(countdownRef.current!);
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+
         let latitude: number | null = null;
         let longitude: number | null = null;
 
-        try {
-          if (Platform.OS !== "web") {
-            const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status === "granted") {
-              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-              latitude = loc.coords.latitude;
-              longitude = loc.coords.longitude;
+        setGettingLocation(true);
+        const MAX_ATTEMPTS = 3;
+        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+          try {
+            if (Platform.OS !== "web") {
+              const { status } = await Location.requestForegroundPermissionsAsync();
+              if (status === "granted") {
+                const loc = await Location.getCurrentPositionAsync({
+                  accuracy: Location.Accuracy.Balanced,
+                });
+                latitude = loc.coords.latitude;
+                longitude = loc.coords.longitude;
+                break;
+              } else {
+                break; // permission denied — no point retrying
+              }
+            } else {
+              await new Promise<void>((resolve) => {
+                navigator.geolocation?.getCurrentPosition(
+                  (pos) => {
+                    latitude = pos.coords.latitude;
+                    longitude = pos.coords.longitude;
+                    resolve();
+                  },
+                  () => resolve(),
+                  { timeout: 5000 }
+                );
+              });
+              if (latitude !== null) break;
             }
-          } else {
-            await new Promise<void>((resolve) => {
-              navigator.geolocation?.getCurrentPosition(
-                (pos) => {
-                  latitude = pos.coords.latitude;
-                  longitude = pos.coords.longitude;
-                  resolve();
-                },
-                () => resolve(),
-                { timeout: 5000 }
-              );
-            });
+          } catch {
+            if (attempt < MAX_ATTEMPTS - 1) {
+              await new Promise((r) => setTimeout(r, 500));
+            }
           }
-        } catch {}
+        }
+        setGettingLocation(false);
 
         createEmergency({
           data: {
             type: selectedType,
             latitude: latitude ?? undefined,
             longitude: longitude ?? undefined,
+            address: latitude === null ? "Location unavailable" : undefined,
           },
         });
 
@@ -424,15 +443,25 @@ export default function DashboardScreen() {
             {!alertSent ? (
               <>
                 <View style={styles.countdownCircle}>
-                  <Text style={styles.countdownNum}>{countdown}</Text>
+                  {gettingLocation ? (
+                    <ActivityIndicator color={colors.primary} size="large" />
+                  ) : (
+                    <Text style={styles.countdownNum}>{countdown}</Text>
+                  )}
                 </View>
-                <Text style={styles.countdownLabel}>Sending Emergency Alert</Text>
-                <Text style={styles.countdownSub}>
-                  Alerting emergency services and your contacts in {countdown} second{countdown !== 1 ? "s" : ""}
+                <Text style={styles.countdownLabel}>
+                  {gettingLocation ? "Getting your location…" : "Sending Emergency Alert"}
                 </Text>
-                <Pressable style={styles.cancelBtn} onPress={handleCancel}>
-                  <Text style={styles.cancelBtnText}>Cancel</Text>
-                </Pressable>
+                <Text style={styles.countdownSub}>
+                  {gettingLocation
+                    ? "Capturing GPS coordinates before sending"
+                    : `Alerting emergency services and your contacts in ${countdown} second${countdown !== 1 ? "s" : ""}`}
+                </Text>
+                {!gettingLocation && (
+                  <Pressable style={styles.cancelBtn} onPress={handleCancel}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </Pressable>
+                )}
               </>
             ) : (
               <>
