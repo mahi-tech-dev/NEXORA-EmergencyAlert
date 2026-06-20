@@ -121,7 +121,9 @@ export default function ProfileScreen() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetProfileQueryKey() });
-        Alert.alert("Saved", "Your profile has been updated.");
+        setSaveSuccess(true);
+        if (saveSuccessTimer.current) clearTimeout(saveSuccessTimer.current);
+        saveSuccessTimer.current = setTimeout(() => setSaveSuccess(false), 3000);
       },
       onError: () => Alert.alert("Error", "Failed to save profile. Please try again."),
     },
@@ -144,6 +146,8 @@ export default function ProfileScreen() {
   const [allergies, setAllergies] = useState("");
   const [medicalConditions, setMedicalConditions] = useState("");
   const [medications, setMedications] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const saveSuccessTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [genderPickerVisible, setGenderPickerVisible] = useState(false);
   const [bloodGroupPickerVisible, setBloodGroupPickerVisible] = useState(false);
@@ -372,7 +376,7 @@ export default function ProfileScreen() {
           <Pressable
             onPress={handleSave}
             disabled={saving}
-            style={{ backgroundColor: colors.primary, borderRadius: colors.radius, paddingVertical: 16, alignItems: "center", marginBottom: 8 }}
+            style={{ backgroundColor: colors.primary, borderRadius: colors.radius, paddingVertical: 16, alignItems: "center", marginBottom: 10 }}
           >
             {saving ? (
               <ActivityIndicator color="#fff" />
@@ -380,6 +384,27 @@ export default function ProfileScreen() {
               <Text style={{ fontSize: 16, fontFamily: "Inter_700Bold", color: "#fff", letterSpacing: 0.5 }}>Save Profile</Text>
             )}
           </Pressable>
+
+          {/* Inline save confirmation */}
+          {saveSuccess && (
+            <View style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              backgroundColor: "rgba(0,230,118,0.10)",
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: "rgba(0,230,118,0.30)",
+              paddingHorizontal: 14,
+              paddingVertical: 11,
+              marginBottom: 8,
+            }}>
+              <Feather name="check-circle" size={18} color="#00e676" />
+              <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: "#00e676" }}>
+                Profile Saved Successfully
+              </Text>
+            </View>
+          )}
 
         </ScrollView>
       )}

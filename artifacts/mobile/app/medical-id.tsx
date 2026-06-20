@@ -8,12 +8,18 @@ import { useAuth } from "@/context/AuthContext";
 
 function calcAge(dob: string | null | undefined): string {
   if (!dob) return "—";
-  const birth = new Date(dob);
-  if (isNaN(birth.getTime())) return "—";
+  // Parse YYYY-MM-DD parts directly to avoid UTC/local timezone mismatch
+  const parts = dob.split("-");
+  if (parts.length !== 3) return "—";
+  const birthYear = parseInt(parts[0], 10);
+  const birthMonth = parseInt(parts[1], 10) - 1; // 0-indexed
+  const birthDay = parseInt(parts[2], 10);
+  if (isNaN(birthYear) || isNaN(birthMonth) || isNaN(birthDay)) return "—";
   const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  const m = now.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--;
+  let age = now.getFullYear() - birthYear;
+  const monthDiff = now.getMonth() - birthMonth;
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birthDay)) age--;
+  if (age < 0 || age > 150) return "—";
   return `${age} yrs`;
 }
 
