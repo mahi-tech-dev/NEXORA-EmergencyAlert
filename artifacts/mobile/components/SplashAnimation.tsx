@@ -18,6 +18,9 @@ export default function SplashAnimation({ onFinished }: Props) {
   const pulseOpacity = useRef(new Animated.Value(0.7)).current;
 
   useEffect(() => {
+    // Safety fallback: ensure splash never blocks the app on web
+    const maxWait = setTimeout(onFinished, 3800);
+
     // Phase 1: shield fades + scales in
     Animated.parallel([
       Animated.spring(shieldScale, { toValue: 1, tension: 50, friction: 6, useNativeDriver: true }),
@@ -51,6 +54,7 @@ export default function SplashAnimation({ onFinished }: Props) {
             // Phase 5: hold briefly, then fade out entire splash
             setTimeout(() => {
               Animated.timing(containerOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
+                clearTimeout(maxWait);
                 onFinished();
               });
             }, 600);
@@ -58,6 +62,7 @@ export default function SplashAnimation({ onFinished }: Props) {
         });
       });
     });
+    return () => clearTimeout(maxWait);
   }, []);
 
   return (

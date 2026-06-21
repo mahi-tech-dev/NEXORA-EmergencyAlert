@@ -41,7 +41,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#06060e" } }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="auth" />
     </Stack>
@@ -70,7 +70,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <GestureHandlerRootView>
+            <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#06060e" }}>
               <KeyboardProvider>
                 <AuthGate>
                   <RootLayoutNav />

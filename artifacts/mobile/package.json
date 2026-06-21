@@ -56,7 +56,9 @@
     "zod-validation-error": "^3.4.0"
   },
   "dependencies": {
+    "expo-print": "^56.0.4",
     "expo-sharing": "^56.0.18",
+    "react-native-qrcode-svg": "^6.3.21",
     "react-native-view-shot": "^5.1.0"
   }
 }
