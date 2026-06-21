@@ -23,6 +23,7 @@ import { captureRef } from "react-native-view-shot";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetProfile, useListContacts } from "@workspace/api-client-react";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { buildWidgetData, getMedicalIDTextSummary, WIDGET_CACHE_KEY } from "@/lib/widgetData";
 
 const CACHE_KEY = "nexora_medical_id_v1";
@@ -238,6 +239,7 @@ function buildPdfHtml(opts: {
 export default function MedicalIDScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { t } = useLanguage();
   const { data: profileData } = useGetProfile();
   const { data: contactsData } = useListContacts();
   const exportCardRef = useRef<View>(null);
@@ -428,7 +430,7 @@ export default function MedicalIDScreen() {
         <Pressable onPress={() => router.back()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color="#fff" />
         </Pressable>
-        <Text style={styles.headerTitle}>Emergency Medical ID</Text>
+        <Text style={styles.headerTitle}>{t.medicalIDTitle}</Text>
         <Pressable style={styles.shareBtn} onPress={handleShare} disabled={sharing}>
           {sharing ? (
             <ActivityIndicator size="small" color="#e8003a" />
@@ -442,7 +444,7 @@ export default function MedicalIDScreen() {
       {isFromCache && liveProfile === null && (
         <View style={styles.cacheBanner}>
           <Feather name="wifi-off" size={13} color="rgba(255,165,0,0.9)" />
-          <Text style={styles.cacheBannerText}>Showing cached data · Connect to refresh</Text>
+          <Text style={styles.cacheBannerText}>{t.medicalIDOffline}</Text>
         </View>
       )}
 
@@ -452,7 +454,7 @@ export default function MedicalIDScreen() {
         <View style={styles.quickActions}>
           <Pressable style={[styles.callAction, styles.callAction112]} onPress={() => callNumber("112")}>
             <MaterialCommunityIcons name="phone-alert" size={20} color="#fff" />
-            <Text style={styles.callActionText}>Call 112</Text>
+            <Text style={styles.callActionText}>{t.medicalIDCall112}</Text>
           </Pressable>
           {primaryContact && (
             <Pressable style={[styles.callAction, styles.callActionPrimary]} onPress={() => callNumber((primaryContact as any).phone)}>
@@ -480,7 +482,7 @@ export default function MedicalIDScreen() {
             <View style={[styles.actionIcon, { backgroundColor: "rgba(100,181,246,0.12)" }]}>
               <MaterialCommunityIcons name="qrcode" size={22} color="#64b5f6" />
             </View>
-            <Text style={styles.actionLabel}>QR Code</Text>
+            <Text style={styles.actionLabel}>{t.medicalIDQRCode}</Text>
             <Text style={styles.actionSub}>Emergency{"\n"}profile</Text>
           </Pressable>
 
@@ -492,7 +494,7 @@ export default function MedicalIDScreen() {
                 <MaterialCommunityIcons name="file-pdf-box" size={22} color="#e8003a" />
               )}
             </View>
-            <Text style={styles.actionLabel}>PDF Card</Text>
+            <Text style={styles.actionLabel}>{t.medicalIDPDF}</Text>
             <Text style={styles.actionSub}>Print &{"\n"}share</Text>
           </Pressable>
 
@@ -504,7 +506,7 @@ export default function MedicalIDScreen() {
                 <MaterialCommunityIcons name="cellphone-screenshot" size={22} color="#00e676" />
               )}
             </View>
-            <Text style={styles.actionLabel}>ICE Wallpaper</Text>
+            <Text style={styles.actionLabel}>{t.medicalIDWallpaper}</Text>
             <Text style={styles.actionSub}>Lock screen{"\n"}card</Text>
           </Pressable>
         </View>

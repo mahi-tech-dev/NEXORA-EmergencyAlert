@@ -30,6 +30,8 @@ import {
 } from "@workspace/api-client-react";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/context/LanguageContext";
+import { LOCALE_LABELS, type Locale } from "@/lib/i18n";
 
 const GENDER_OPTIONS = ["Male", "Female", "Other", "Prefer not to say"];
 const BLOOD_GROUP_OPTIONS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"];
@@ -140,6 +142,7 @@ function OptionPickerModal({ visible, title, options, selected, onSelect, onClos
 
 export default function ProfileScreen() {
   const colors = useColors();
+  const { t, locale, setLocale } = useLanguage();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const navigation = useNavigation();
@@ -544,6 +547,47 @@ export default function ProfileScreen() {
                 <Text style={{ fontSize: 14, fontFamily: "Inter_600SemiBold", color: colors.primary }}>Add Contact</Text>
               </Pressable>
             )}
+          </SectionCard>
+
+          {/* Language */}
+          <SectionCard title={t.profileLanguage} colors={colors}>
+            {(["en", "hi", "mr"] as Locale[]).map((code) => {
+              const isSelected = locale === code;
+              return (
+                <Pressable
+                  key={code}
+                  onPress={() => setLocale(code)}
+                  style={{
+                    flexDirection: "row", alignItems: "center", gap: 12,
+                    paddingVertical: 11, paddingHorizontal: 14,
+                    borderRadius: 10, marginBottom: 6,
+                    backgroundColor: isSelected ? "rgba(232,0,58,0.08)" : colors.secondary,
+                    borderWidth: 1.5,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  }}
+                >
+                  <View style={{
+                    width: 20, height: 20, borderRadius: 10,
+                    borderWidth: 2,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                    alignItems: "center", justifyContent: "center",
+                  }}>
+                    {isSelected && (
+                      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary }} />
+                    )}
+                  </View>
+                  <Text style={{
+                    fontSize: 15, fontFamily: isSelected ? "Inter_600SemiBold" : "Inter_400Regular",
+                    color: isSelected ? colors.foreground : colors.mutedForeground,
+                  }}>
+                    {LOCALE_LABELS[code]}
+                  </Text>
+                  {isSelected && (
+                    <Feather name="check" size={16} color={colors.primary} style={{ marginLeft: "auto" }} />
+                  )}
+                </Pressable>
+              );
+            })}
           </SectionCard>
 
           {/* Save / Cancel — only in edit mode */}

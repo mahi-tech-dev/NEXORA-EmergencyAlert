@@ -20,6 +20,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/context/LanguageContext";
 
 const TYPE_CONFIG: Record<string, { icon: string; color: string; label: string }> = {
   accident: { icon: "car-emergency", color: "#ff6b35", label: "Accident" },
@@ -56,6 +57,7 @@ function formatAbsolute(dateStr: string): string {
 
 export default function HistoryScreen() {
   const colors = useColors();
+  const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [resolvingId, setResolvingId] = useState<number | null>(null);
@@ -257,7 +259,7 @@ export default function HistoryScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Alert History</Text>
+        <Text style={styles.title}>{t.historyTitle}</Text>
         <Text style={styles.subtitle}>All your emergency alerts</Text>
         {emergencies.length > 0 && (
           <View style={styles.countBadge}>
@@ -275,7 +277,7 @@ export default function HistoryScreen() {
           <View style={styles.emptyIcon}>
             <Feather name="shield" size={32} color={colors.mutedForeground} />
           </View>
-          <Text style={styles.emptyTitle}>No Alerts Yet</Text>
+          <Text style={styles.emptyTitle}>{t.historyNoAlerts}</Text>
           <Text style={styles.emptyText}>
             Your emergency alerts will appear here once you trigger SOS
           </Text>
@@ -323,7 +325,7 @@ export default function HistoryScreen() {
                             { color: isActive ? colors.primary : "#00e676" },
                           ]}
                         >
-                          {isActive ? "● Active" : "✓ Resolved"}
+                          {isActive ? `● ${t.historyActive}` : `✓ ${t.historyResolved}`}
                         </Text>
                       </View>
                     </View>
@@ -375,7 +377,7 @@ export default function HistoryScreen() {
                         ) : (
                           <>
                             <MaterialCommunityIcons name="shield-check" size={16} color="#00e676" />
-                            <Text style={styles.safeBtnText}>I'm Safe</Text>
+                            <Text style={styles.safeBtnText}>{t.historyImSafe}</Text>
                           </>
                         )}
                       </Pressable>
@@ -386,7 +388,7 @@ export default function HistoryScreen() {
                         onPress={() => handleViewOnMap(alert.latitude!, alert.longitude!)}
                       >
                         <Feather name="map" size={14} color={colors.mutedForeground} />
-                        <Text style={styles.mapBtnText}>View on Map</Text>
+                        <Text style={styles.mapBtnText}>{t.historyViewMap}</Text>
                       </Pressable>
                     )}
                   </View>

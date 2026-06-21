@@ -18,17 +18,22 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   useCreateEmergency,
   useUpdateEmergencyStatus,
+  useListEmergencies,
+  useListContacts,
+  useGetProfile,
   getListEmergenciesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/context/LanguageContext";
+import { useReadinessStatus } from "@/hooks/useReadinessStatus";
+import { startVoiceSOSSession, type VoiceSOSSession } from "@/lib/voiceSos";
 
 type EmergencyType = "accident" | "fire" | "heart_attack" | "theft";
 
 interface EmergencyInfo {
   type: EmergencyType;
-  label: string;
   icon: string;
   color: string;
   instructions: string[];
@@ -37,7 +42,6 @@ interface EmergencyInfo {
 const EMERGENCY_TYPES: EmergencyInfo[] = [
   {
     type: "accident",
-    label: "Accident",
     icon: "car-emergency",
     color: "#ff6b35",
     instructions: [
@@ -50,7 +54,6 @@ const EMERGENCY_TYPES: EmergencyInfo[] = [
   },
   {
     type: "fire",
-    label: "Fire",
     icon: "fire",
     color: "#ff4500",
     instructions: [
@@ -63,7 +66,6 @@ const EMERGENCY_TYPES: EmergencyInfo[] = [
   },
   {
     type: "heart_attack",
-    label: "Heart Attack",
     icon: "heart-pulse",
     color: "#e8003a",
     instructions: [
@@ -76,7 +78,6 @@ const EMERGENCY_TYPES: EmergencyInfo[] = [
   },
   {
     type: "theft",
-    label: "Theft / Harassment",
     icon: "shield-alert",
     color: "#9c27b0",
     instructions: [
@@ -91,19 +92,206 @@ const EMERGENCY_TYPES: EmergencyInfo[] = [
 
 const FAKE_CONTACTS = ["Sarah M.", "John D.", "Mom"];
 const COUNTDOWN_START = 5;
-const SAFE_CHECKIN_DELAY_MS = 15 * 60 * 1000; // 15 minutes
+const SAFE_CHECKIN_DELAY_MS = 15 * 60 * 1000;
 
+function formatRelative(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+}
+
+// ── Readiness Status Card ─────────────────────────────────────
+function ReadinessCard({ colors }: { colors: any }) {
+  const { t } = useLanguage();
+  const status = useReadinessStatus();
+
+  const rows = [
+    {
+      icon: "crosshairs-gps",
+      label: t.readinessGPS,
+      value: status.gpsGranted === null ? "…" : status.gpsGranted ? t.readinessGPSOn : t.readinessGPSOff,
+      ok: status.gpsGranted,
+      warning: status.gpsGranted === false,
+    },
+    {
+      icon: "wifi",
+      label: t.readinessInternet,
+      value: status.internetConnected === null ? "…" : status.internetConnected ? t.readinessOnline : t.readinessOffline,
+      ok: status.internetConnected,
+      warning: status.internetConnected === false,
+    },
+    {
+      icon: status.batteryCharging ? "battery-charging" : "battery",
+      label: t.readinessBattery,
+      value: status.batteryLevel === null ? "…" : `${Math.round(status.batteryLevel * 100)}%`,
+      ok: !status.batteryLow,
+      warning: status.batteryLow,
+    },
+    {
+      icon: "id-card",
+      label: t.readinessOfflineMedID,
+      value: status.offlineMedicalIdReady ? t.readinessOfflineMedIDReady : t.readinessOfflineMedIDNot,
+      ok: status.offlineMedicalIdReady,
+      warning: !status.offlineMedicalIdReady,
+    },
+  ];
+
+  const warnings = rows.filter((r) => r.warning);
+
+  return (
+    <View style={[rdStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={rdStyles.cardHeader}>
+        <MaterialCommunityIcons name="shield-check" size={16} color="#00e676" />
+        <Text style={[rdStyles.cardTitle, { color: colors.mutedForeground }]}>{t.readinessTitle}</Text>
+      </View>
+      <View style={rdStyles.rows}>
+        {rows.map((row) => {
+          const dotColor = row.ok === null ? "#888" : row.ok ? "#00e676" : "#e8003a";
+          const valColor = row.warning ? "#ff9100" : row.ok ? "#00e676" : colors.mutedForeground;
+          return (
+            <View key={row.label} style={rdStyles.row}>
+              <MaterialCommunityIcons name={row.icon as any} size={14} color={colors.mutedForeground} />
+              <Text style={[rdStyles.rowLabel, { color: colors.mutedForeground }]}>{row.label}</Text>
+              <View style={{ flex: 1 }} />
+              <View style={[rdStyles.dot, { backgroundColor: dotColor }]} />
+              <Text style={[rdStyles.rowVal, { color: valColor }]}>{row.value}</Text>
+            </View>
+          );
+        })}
+      </View>
+      {warnings.length > 0 && (
+        <View style={rdStyles.warningRow}>
+          <Feather name="alert-triangle" size={12} color="#ff9100" />
+          <Text style={rdStyles.warningText}>
+            {warnings.map((w) => {
+              if (w.icon === "crosshairs-gps") return t.readinessGPSOff;
+              if (w.icon === "battery" || w.icon === "battery-charging") return t.readinessBatteryLow;
+              if (w.icon === "wifi") return t.readinessOffline;
+              if (w.icon === "id-card") return t.readinessOfflineMedIDNot;
+              return null;
+            }).filter(Boolean).join(" · ")}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const rdStyles = StyleSheet.create({
+  card: {
+    borderRadius: 16, borderWidth: 1,
+    padding: 14, marginBottom: 14,
+  },
+  cardHeader: {
+    flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10,
+  },
+  cardTitle: {
+    fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  rows: { gap: 8 },
+  row: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+  },
+  rowLabel: {
+    fontSize: 13, fontFamily: "Inter_500Medium",
+  },
+  dot: {
+    width: 7, height: 7, borderRadius: 3.5, marginRight: 4,
+  },
+  rowVal: {
+    fontSize: 13, fontFamily: "Inter_600SemiBold",
+  },
+  warningRow: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    marginTop: 10, paddingTop: 10,
+    borderTopWidth: 1, borderTopColor: "rgba(255,145,0,0.2)",
+  },
+  warningText: {
+    fontSize: 11, fontFamily: "Inter_500Medium", color: "#ff9100",
+    flex: 1,
+  },
+});
+
+// ── Safety Dashboard ──────────────────────────────────────────
+interface DashboardProps {
+  lastAlertStr: string;
+  activeCount: number;
+  contactsCount: number;
+  medicalIDReady: boolean;
+  offlineReady: boolean;
+  colors: any;
+  t: any;
+}
+function SafetyDashboard({ lastAlertStr, activeCount, contactsCount, medicalIDReady, offlineReady, colors, t }: DashboardProps) {
+  const cards = [
+    { label: t.dashLastAlert, value: lastAlertStr, icon: "clock-alert-outline", color: "#ff9100", warn: false },
+    { label: t.dashActive, value: String(activeCount), icon: "bell-ring", color: activeCount > 0 ? "#e8003a" : "#00e676", warn: activeCount > 0 },
+    { label: t.dashContacts, value: String(contactsCount), icon: "account-group", color: contactsCount === 0 ? "#ff9100" : "#00bcd4", warn: contactsCount === 0 },
+    { label: t.dashMedicalID, value: medicalIDReady ? "✓" : "✗", icon: "card-account-details", color: medicalIDReady ? "#00e676" : "#ff9100", warn: !medicalIDReady },
+    { label: t.dashOffline, value: offlineReady ? t.dashReady : "✗", icon: "wifi-off", color: offlineReady ? "#00e676" : "#ff9100", warn: !offlineReady },
+  ];
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }} contentContainerStyle={{ gap: 10, paddingRight: 4 }}>
+      {cards.map((card) => (
+        <View key={card.label} style={[dbStyles.card, { backgroundColor: colors.card, borderColor: card.warn ? `${card.color}55` : colors.border }]}>
+          <View style={[dbStyles.iconBox, { backgroundColor: `${card.color}18` }]}>
+            <MaterialCommunityIcons name={card.icon as any} size={18} color={card.color} />
+          </View>
+          <Text style={[dbStyles.value, { color: card.color }]}>{card.value}</Text>
+          <Text style={[dbStyles.label, { color: colors.mutedForeground }]}>{card.label}</Text>
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+const dbStyles = StyleSheet.create({
+  card: {
+    width: 90, borderRadius: 14, borderWidth: 1,
+    padding: 12, alignItems: "center", gap: 6,
+  },
+  iconBox: {
+    width: 38, height: 38, borderRadius: 10,
+    alignItems: "center", justifyContent: "center",
+  },
+  value: {
+    fontSize: 18, fontFamily: "Inter_700Bold",
+  },
+  label: {
+    fontSize: 10, fontFamily: "Inter_500Medium",
+    textAlign: "center", letterSpacing: 0.5,
+  },
+});
+
+// ── Main Screen ───────────────────────────────────────────────
 export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
+
   const [selectedType, setSelectedType] = useState<EmergencyType | null>(null);
   const [sosActive, setSosActive] = useState(false);
   const [countdown, setCountdown] = useState(COUNTDOWN_START);
   const [alertSent, setAlertSent] = useState(false);
   const [sosCooldownMsg, setSosCooldownMsg] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
+
+  // Voice SOS state
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceResultMsg, setVoiceResultMsg] = useState("");
+  const voiceSessionRef = useRef<VoiceSOSSession | null>(null);
+  const voicePulse = useRef(new Animated.Value(1)).current;
+
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const safeCheckInRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAlertIdRef = useRef<number | null>(null);
@@ -114,9 +302,7 @@ export default function DashboardScreen() {
 
   const { mutate: updateEmergencyStatus } = useUpdateEmergencyStatus({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListEmergenciesQueryKey() });
-      },
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getListEmergenciesQueryKey() }),
     },
   });
 
@@ -126,28 +312,18 @@ export default function DashboardScreen() {
         queryClient.invalidateQueries({ queryKey: getListEmergenciesQueryKey() });
         if (data?.id) {
           lastAlertIdRef.current = data.id;
-          // Safe check-in after 15 minutes
           if (safeCheckInRef.current) clearTimeout(safeCheckInRef.current);
           safeCheckInRef.current = setTimeout(() => {
             Alert.alert(
               "Are you safe?",
               "It has been 15 minutes since your emergency alert. Please confirm your status.",
               [
-                {
-                  text: "NEED HELP",
-                  style: "destructive",
-                  onPress: () => {
-                    // keep active — do nothing
-                  },
-                },
+                { text: "NEED HELP", style: "destructive", onPress: () => {} },
                 {
                   text: "YES, I'M SAFE",
                   onPress: () => {
                     if (lastAlertIdRef.current !== null) {
-                      updateEmergencyStatus({
-                        id: lastAlertIdRef.current,
-                        data: { status: "resolved" },
-                      });
+                      updateEmergencyStatus({ id: lastAlertIdRef.current, data: { status: "resolved" } });
                     }
                   },
                 },
@@ -160,6 +336,20 @@ export default function DashboardScreen() {
     },
   });
 
+  // Safety dashboard data
+  const { data: emergenciesData } = useListEmergencies();
+  const { data: contactsData } = useListContacts();
+  const { data: profileData } = useGetProfile();
+
+  const emergencies = (emergenciesData as any)?.emergencies ?? [];
+  const activeCount = emergencies.filter((e: any) => e.status === "active").length;
+  const lastAlert = emergencies.length > 0 ? emergencies[0]?.createdAt : null;
+  const lastAlertStr = lastAlert ? formatRelative(lastAlert) : t.dashNever;
+  const contactsCount = (contactsData as any)?.contacts?.length ?? 0;
+  const medicalIDReady = !!(profileData && "bloodGroup" in (profileData as any) && (profileData as any).bloodGroup);
+  const offlineReady = false; // resolved at render by readiness hook via AsyncStorage
+
+  // SOS pulse animation
   useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
@@ -177,12 +367,25 @@ export default function DashboardScreen() {
     return () => pulse.stop();
   }, []);
 
-  // Cleanup on unmount
+  // Voice SOS mic pulse animation
+  useEffect(() => {
+    if (!voiceListening) return;
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(voicePulse, { toValue: 1.25, duration: 600, useNativeDriver: true }),
+        Animated.timing(voicePulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [voiceListening]);
+
   useEffect(() => {
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
       if (safeCheckInRef.current) clearTimeout(safeCheckInRef.current);
       if (cooldownMsgTimerRef.current) clearTimeout(cooldownMsgTimerRef.current);
+      voiceSessionRef.current?.stop();
     };
   }, []);
 
@@ -191,7 +394,6 @@ export default function DashboardScreen() {
       Alert.alert("Select Emergency Type", "Please select the type of emergency before triggering SOS.");
       return;
     }
-    // Duplicate prevention: block for 30s after last alert
     const COOLDOWN_MS = 30 * 1000;
     if (lastAlertSentAtRef.current !== null && Date.now() - lastAlertSentAtRef.current < COOLDOWN_MS) {
       setSosCooldownMsg(true);
@@ -215,31 +417,21 @@ export default function DashboardScreen() {
 
         let latitude: number | null = null;
         let longitude: number | null = null;
-
         setGettingLocation(true);
-        const MAX_ATTEMPTS = 3;
-        for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        for (let attempt = 0; attempt < 3; attempt++) {
           try {
             if (Platform.OS !== "web") {
               const { status } = await Location.requestForegroundPermissionsAsync();
               if (status === "granted") {
-                const loc = await Location.getCurrentPositionAsync({
-                  accuracy: Location.Accuracy.Balanced,
-                });
+                const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
                 latitude = loc.coords.latitude;
                 longitude = loc.coords.longitude;
                 break;
-              } else {
-                break; // permission denied — no point retrying
-              }
+              } else { break; }
             } else {
               await new Promise<void>((resolve) => {
                 navigator.geolocation?.getCurrentPosition(
-                  (pos) => {
-                    latitude = pos.coords.latitude;
-                    longitude = pos.coords.longitude;
-                    resolve();
-                  },
+                  (pos) => { latitude = pos.coords.latitude; longitude = pos.coords.longitude; resolve(); },
                   () => resolve(),
                   { timeout: 5000 }
                 );
@@ -247,13 +439,10 @@ export default function DashboardScreen() {
               if (latitude !== null) break;
             }
           } catch {
-            if (attempt < MAX_ATTEMPTS - 1) {
-              await new Promise((r) => setTimeout(r, 500));
-            }
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 500));
           }
         }
         setGettingLocation(false);
-
         createEmergency({
           data: {
             type: selectedType,
@@ -262,7 +451,6 @@ export default function DashboardScreen() {
             address: latitude === null ? "Location unavailable" : undefined,
           },
         });
-
         lastAlertSentAtRef.current = Date.now();
         setAlertSent(true);
       }
@@ -283,7 +471,64 @@ export default function DashboardScreen() {
     setCountdown(COUNTDOWN_START);
   };
 
+  // Voice SOS handlers
+  const handleVoiceSOSOpen = () => {
+    setVoiceTranscript("");
+    setVoiceResultMsg("");
+    setVoiceListening(false);
+    setVoiceModalVisible(true);
+  };
+
+  const handleStartListening = () => {
+    setVoiceTranscript("");
+    setVoiceResultMsg("");
+    setVoiceListening(true);
+
+    const session = startVoiceSOSSession(
+      (result) => {
+        setVoiceListening(false);
+        voiceSessionRef.current = null;
+        if (result.type === "trigger_detected") {
+          setVoiceResultMsg(t.sosVoiceDetected(result.phrase));
+          // Close modal and trigger SOS after brief delay
+          setTimeout(() => {
+            setVoiceModalVisible(false);
+            handleSOS();
+          }, 1200);
+        } else if (result.type === "no_trigger") {
+          setVoiceResultMsg(t.sosVoiceNone);
+        } else if (result.type === "unavailable") {
+          setVoiceResultMsg(result.reason);
+        } else if (result.type === "error") {
+          setVoiceResultMsg(result.message);
+        } else {
+          setVoiceResultMsg("");
+        }
+      },
+      (interim) => setVoiceTranscript(interim)
+    );
+
+    if (session) {
+      voiceSessionRef.current = session;
+    }
+  };
+
+  const handleStopListening = () => {
+    voiceSessionRef.current?.stop();
+    voiceSessionRef.current = null;
+    setVoiceListening(false);
+  };
+
   const selectedInfo = EMERGENCY_TYPES.find((e) => e.type === selectedType);
+  const getTypeLabel = (type: EmergencyType) => {
+    const map: Record<EmergencyType, string> = {
+      accident: t.typeAccident,
+      fire: t.typeFire,
+      heart_attack: t.typeHeartAttack,
+      theft: t.typeTheft,
+    };
+    return map[type];
+  };
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -299,21 +544,15 @@ export default function DashboardScreen() {
     userName: { fontSize: 22, fontWeight: "700" as const, color: colors.foreground, fontFamily: "Inter_700Bold" },
     logoutBtn: { padding: 8 },
     testBanner: {
-      marginHorizontal: 20,
-      marginBottom: 8,
-      backgroundColor: "rgba(255,145,0,0.12)",
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: "rgba(255,145,0,0.35)",
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
+      marginHorizontal: 20, marginBottom: 8,
+      backgroundColor: "rgba(255,145,0,0.12)", borderRadius: 10,
+      borderWidth: 1, borderColor: "rgba(255,145,0,0.35)",
+      paddingHorizontal: 12, paddingVertical: 8,
+      flexDirection: "row", alignItems: "center", gap: 8,
     },
     testBannerText: { flex: 1, fontSize: 12, fontFamily: "Inter_500Medium", color: "#ff9100" },
     scrollContent: { paddingHorizontal: 20, paddingBottom: Platform.OS === "web" ? 120 : 100 },
-    sosSection: { alignItems: "center", marginVertical: 28 },
+    sosSection: { alignItems: "center", marginVertical: 24 },
     sosHint: { fontSize: 12, color: colors.mutedForeground, fontFamily: "Inter_400Regular", marginBottom: 16, letterSpacing: 1.5, textTransform: "uppercase" },
     sosOuter: { width: 200, height: 200, borderRadius: 100, alignItems: "center", justifyContent: "center" },
     sosPulseRing: { position: "absolute", width: 200, height: 200, borderRadius: 100, backgroundColor: colors.primary },
@@ -332,6 +571,15 @@ export default function DashboardScreen() {
     typeCardSelected: { borderWidth: 2 },
     typeCardLabel: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
     iconCircle: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+    // Voice SOS button
+    voiceBtn: {
+      marginTop: 16, flexDirection: "row", alignItems: "center", justifyContent: "center",
+      gap: 10, backgroundColor: "rgba(100,181,246,0.08)",
+      borderRadius: 14, paddingVertical: 14, paddingHorizontal: 20,
+      borderWidth: 1, borderColor: "rgba(100,181,246,0.25)",
+    },
+    voiceBtnText: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: "#64b5f6" },
+    // SOS Modal
     overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "flex-end" },
     modal: {
       backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28,
@@ -366,10 +614,11 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Welcome back,</Text>
-          <Text style={styles.userName}>{user?.name ?? "Responder"}</Text>
+          <Text style={styles.greeting}>{t.sosWelcome}</Text>
+          <Text style={styles.userName}>{user?.name ?? t.sosGreeting}</Text>
         </View>
         <Pressable style={styles.logoutBtn} onPress={logout}>
           <Feather name="log-out" size={20} color={colors.mutedForeground} />
@@ -379,22 +628,38 @@ export default function DashboardScreen() {
       {/* Test Mode Banner */}
       <View style={styles.testBanner}>
         <MaterialCommunityIcons name="alert-rhombus" size={16} color="#ff9100" />
-        <Text style={styles.testBannerText}>⚠ TEST MODE — No real emergency services are contacted.</Text>
+        <Text style={styles.testBannerText}>{t.sosTestMode}</Text>
       </View>
 
-      {/* SOS Cooldown Message */}
+      {/* SOS Cooldown */}
       {sosCooldownMsg && (
         <View style={{ marginHorizontal: 20, marginBottom: 8, backgroundColor: "rgba(232,0,58,0.10)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(232,0,58,0.35)", paddingHorizontal: 14, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 8 }}>
           <MaterialCommunityIcons name="alert-circle" size={18} color={colors.primary} />
           <Text style={{ flex: 1, fontSize: 13, fontFamily: "Inter_600SemiBold", color: colors.primary }}>
-            Emergency alert already active. Please wait 30 seconds.
+            {t.sosCooldown}
           </Text>
         </View>
       )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+
+        {/* ── Safety Dashboard ── */}
+        <SafetyDashboard
+          lastAlertStr={lastAlertStr}
+          activeCount={activeCount}
+          contactsCount={contactsCount}
+          medicalIDReady={medicalIDReady}
+          offlineReady={false}
+          colors={colors}
+          t={t}
+        />
+
+        {/* ── Readiness Status Card ── */}
+        <ReadinessCard colors={colors} />
+
+        {/* ── SOS Section ── */}
         <View style={styles.sosSection}>
-          <Text style={styles.sosHint}>Emergency SOS</Text>
+          <Text style={styles.sosHint}>{t.sosHint}</Text>
           <View style={styles.sosOuter}>
             <Animated.View style={[styles.sosPulseRing, { transform: [{ scale: pulseAnim }], opacity: pulseOpacity }]} />
             <Pressable
@@ -402,19 +667,21 @@ export default function DashboardScreen() {
               onPress={handleSOS}
               android_ripple={{ color: "rgba(255,255,255,0.2)", radius: 85 }}
             >
-              <Text style={styles.sosLabel}>SOS</Text>
-              <Text style={styles.sosSubLabel}>PRESS & HOLD</Text>
+              <Text style={styles.sosLabel}>{t.sosLabel}</Text>
+              <Text style={styles.sosSubLabel}>{t.sosSubLabel}</Text>
             </Pressable>
           </View>
           <Text style={styles.typeHint}>
-            {selectedType ? `Emergency: ${selectedInfo?.label}` : "Select an emergency type below"}
+            {selectedType ? `${t.sosSelectedPrefix}${getTypeLabel(selectedType)}` : t.sosSelectType}
           </Text>
         </View>
 
-        <Text style={styles.sectionLabel}>Emergency Type</Text>
+        {/* ── Emergency Type Grid ── */}
+        <Text style={styles.sectionLabel}>{t.sosSectionLabel}</Text>
         <View style={styles.grid}>
           {EMERGENCY_TYPES.map((item) => {
             const isSelected = selectedType === item.type;
+            const label = getTypeLabel(item.type);
             return (
               <Pressable
                 key={item.type}
@@ -428,18 +695,25 @@ export default function DashboardScreen() {
                 <View style={[styles.iconCircle, { backgroundColor: `${item.color}22` }]}>
                   <MaterialCommunityIcons name={item.icon as any} size={22} color={item.color} />
                 </View>
-                <Text style={[styles.typeCardLabel, { color: isSelected ? item.color : colors.foreground }]}>{item.label}</Text>
+                <Text style={[styles.typeCardLabel, { color: isSelected ? item.color : colors.foreground }]}>{label}</Text>
               </Pressable>
             );
           })}
         </View>
+
+        {/* ── Voice SOS Button ── */}
+        <Pressable style={styles.voiceBtn} onPress={handleVoiceSOSOpen}>
+          <MaterialCommunityIcons name="microphone" size={20} color="#64b5f6" />
+          <Text style={styles.voiceBtnText}>{t.sosVoiceBtn}</Text>
+        </Pressable>
+
       </ScrollView>
 
+      {/* ── SOS Modal ── */}
       <Modal visible={sosActive} transparent animationType="slide" onRequestClose={handleCancel}>
         <View style={styles.overlay}>
           <View style={styles.modal}>
             <View style={styles.modalHandle} />
-
             {!alertSent ? (
               <>
                 <View style={styles.countdownCircle}>
@@ -450,16 +724,14 @@ export default function DashboardScreen() {
                   )}
                 </View>
                 <Text style={styles.countdownLabel}>
-                  {gettingLocation ? "Getting your location…" : "Sending Emergency Alert"}
+                  {gettingLocation ? t.sosGettingLocation : t.sosCountdownLabel}
                 </Text>
                 <Text style={styles.countdownSub}>
-                  {gettingLocation
-                    ? "Capturing GPS coordinates before sending"
-                    : `Alerting emergency services and your contacts in ${countdown} second${countdown !== 1 ? "s" : ""}`}
+                  {gettingLocation ? t.sosCapturingGPS : t.sosCountdownSub(countdown)}
                 </Text>
                 {!gettingLocation && (
                   <Pressable style={styles.cancelBtn} onPress={handleCancel}>
-                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                    <Text style={styles.cancelBtnText}>{t.cancel}</Text>
                   </Pressable>
                 )}
               </>
@@ -469,12 +741,11 @@ export default function DashboardScreen() {
                   <View style={styles.sentIcon}>
                     <MaterialCommunityIcons name="check-circle" size={32} color="#00e676" />
                   </View>
-                  <Text style={styles.sentTitle}>Alert Sent</Text>
+                  <Text style={styles.sentTitle}>{t.sosSentTitle}</Text>
                   <Text style={styles.sentSub}>
-                    {selectedInfo?.label} emergency reported. Help is on the way.
+                    {t.sosSentSub(selectedType ? getTypeLabel(selectedType) : "")}
                   </Text>
                 </View>
-
                 <View style={styles.contactsRow}>
                   {FAKE_CONTACTS.map((c) => (
                     <View key={c} style={styles.contactChip}>
@@ -482,21 +753,90 @@ export default function DashboardScreen() {
                     </View>
                   ))}
                 </View>
-
-                <Text style={styles.instructionsTitle}>What to do now</Text>
+                <Text style={styles.instructionsTitle}>{t.sosWhatToDo}</Text>
                 {selectedInfo?.instructions.map((inst, i) => (
                   <View key={i} style={styles.instructionRow}>
-                    <View style={styles.bullet}>
-                      <Text style={styles.bulletText}>{i + 1}</Text>
-                    </View>
+                    <View style={styles.bullet}><Text style={styles.bulletText}>{i + 1}</Text></View>
                     <Text style={styles.instructionText}>{inst}</Text>
                   </View>
                 ))}
-
                 <Pressable style={styles.closeBtn} onPress={handleClose}>
-                  <Text style={styles.closeBtnText}>Done</Text>
+                  <Text style={styles.closeBtnText}>{t.done}</Text>
                 </Pressable>
               </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Voice SOS Modal ── */}
+      <Modal visible={voiceModalVisible} transparent animationType="fade" onRequestClose={() => { handleStopListening(); setVoiceModalVisible(false); }}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.82)", justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 28, paddingBottom: insets.bottom + 28, borderTopWidth: 1, borderColor: "rgba(100,181,246,0.3)", alignItems: "center" }}>
+            <View style={{ width: 40, height: 4, backgroundColor: colors.border, borderRadius: 2, marginBottom: 24 }} />
+
+            <Text style={{ fontSize: 17, fontFamily: "Inter_700Bold", color: colors.foreground, marginBottom: 6 }}>
+              {t.sosVoiceBtn}
+            </Text>
+            <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginBottom: 28, textAlign: "center" }}>
+              {"Say: \"Help\", \"SOS\", \"Emergency\" or \"Save me\""}
+            </Text>
+
+            {/* Mic icon with pulse */}
+            <Animated.View style={{ transform: [{ scale: voiceListening ? voicePulse : new Animated.Value(1) }], marginBottom: 20 }}>
+              <View style={{ width: 90, height: 90, borderRadius: 45, backgroundColor: voiceListening ? "rgba(100,181,246,0.15)" : "rgba(255,255,255,0.05)", borderWidth: 2, borderColor: voiceListening ? "#64b5f6" : colors.border, alignItems: "center", justifyContent: "center" }}>
+                <MaterialCommunityIcons
+                  name={voiceListening ? "microphone" : "microphone-outline"}
+                  size={40}
+                  color={voiceListening ? "#64b5f6" : colors.mutedForeground}
+                />
+              </View>
+            </Animated.View>
+
+            {/* Status text */}
+            {voiceListening && (
+              <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: "#64b5f6", marginBottom: 8 }}>
+                {t.sosVoiceListening}
+              </Text>
+            )}
+            {voiceTranscript ? (
+              <Text style={{ fontSize: 14, fontFamily: "Inter_400Regular", color: colors.foreground, marginBottom: 8, textAlign: "center", fontStyle: "italic" }}>
+                "{voiceTranscript}"
+              </Text>
+            ) : null}
+            {voiceResultMsg ? (
+              <View style={{ backgroundColor: "rgba(100,181,246,0.08)", borderRadius: 10, borderWidth: 1, borderColor: "rgba(100,181,246,0.2)", padding: 12, marginBottom: 12, width: "100%" }}>
+                <Text style={{ fontSize: 13, fontFamily: "Inter_500Medium", color: "#64b5f6", textAlign: "center" }}>
+                  {voiceResultMsg}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Buttons */}
+            {!voiceListening ? (
+              <>
+                <Pressable
+                  style={{ backgroundColor: "#64b5f6", borderRadius: 14, paddingVertical: 14, paddingHorizontal: 32, marginBottom: 12, width: "100%", alignItems: "center" }}
+                  onPress={handleStartListening}
+                >
+                  <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: "#000" }}>
+                    {voiceResultMsg ? "Try Again" : "Start Listening"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={{ backgroundColor: colors.secondary, borderRadius: 14, paddingVertical: 14, width: "100%", alignItems: "center" }}
+                  onPress={() => { setVoiceModalVisible(false); setVoiceResultMsg(""); setVoiceTranscript(""); }}
+                >
+                  <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: colors.foreground }}>{t.close}</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Pressable
+                style={{ backgroundColor: "rgba(232,0,58,0.15)", borderRadius: 14, paddingVertical: 14, width: "100%", alignItems: "center", borderWidth: 1, borderColor: "rgba(232,0,58,0.4)" }}
+                onPress={handleStopListening}
+              >
+                <Text style={{ fontSize: 16, fontFamily: "Inter_600SemiBold", color: colors.primary }}>{t.sosVoiceStop}</Text>
+              </Pressable>
             )}
           </View>
         </View>

@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getListNearbyQueryKey, useListNearby } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useColors } from "@/hooks/useColors";
+import { useLanguage } from "@/context/LanguageContext";
 
 type FilterType = "all" | "hospital" | "police" | "fire_station";
 
@@ -28,6 +29,7 @@ const TYPE_CONFIG: Record<string, { icon: string; color: string; label: string }
 
 export default function NearbyScreen() {
   const colors = useColors();
+  const { t } = useLanguage();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<FilterType>("all");
@@ -274,7 +276,7 @@ export default function NearbyScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Nearby Help</Text>
+        <Text style={styles.title}>{t.nearbyTitle}</Text>
         <Text style={styles.subtitle}>Hospitals, police, and fire stations near you</Text>
       </View>
 
@@ -299,7 +301,7 @@ export default function NearbyScreen() {
       <View style={styles.filterRow}>
         {(["all", "hospital", "police", "fire_station"] as FilterType[]).map((f) => {
           const isActive = filter === f;
-          const label = f === "all" ? "All" : TYPE_CONFIG[f].label;
+          const label = f === "all" ? t.nearbyAll : f === "hospital" ? t.nearbyHospitals : f === "police" ? t.nearbyPolice : t.nearbyFire;
           const color = f === "all" ? colors.primary : TYPE_CONFIG[f].color;
           return (
             <Pressable
@@ -328,7 +330,7 @@ export default function NearbyScreen() {
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} size="large" />
           <Text style={[styles.emptyText, { marginTop: 12 }]}>
-            {locLoading ? "Getting your location…" : "Searching nearby…"}
+            {locLoading ? t.loading : t.nearbyLoading}
           </Text>
         </View>
       ) : (
@@ -346,7 +348,7 @@ export default function NearbyScreen() {
           {filtered.length === 0 ? (
             <View style={[styles.center, { paddingTop: 60 }]}>
               <MaterialCommunityIcons name="map-search-outline" size={40} color={colors.mutedForeground} />
-              <Text style={styles.emptyText}>No locations found</Text>
+              <Text style={styles.emptyText}>{t.nearbyNoResults}</Text>
             </View>
           ) : (
             filtered.map((loc) => {
